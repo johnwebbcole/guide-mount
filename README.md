@@ -1,10 +1,12 @@
-# vdoveplate
+# guide-mount
 
 > vixen dovetail plate adapter
 
+[Live Example](https://raw.githubusercontent.com/johnwebbcole/guide-mount/master/dist/vdoveplate.jscad)
+
 ## Running
 
-The jscad project `vdoveplate` uses gulp to create a `dist/vdoveplate.jscad` file and watches your source for changes. You can drag the `dist/vdoveplate.jscad` directory into the drop area on [openjscad.org](http://openjscad.org). Make sure you check `Auto Reload` and any time you save, gulp will recreate the `dist/vdoveplate.jscad` file and your model should refresh.
+The jscad project `guide-mount` uses gulp to create a `dist/guide-mount.jscad` file and watches your source for changes. You can drag the `dist/guide-mount.jscad` directory into the drop area on [openjscad.org](http://openjscad.org). Make sure you check `Auto Reload` and any time you save, gulp will recreate the `dist/guide-mount.jscad` file and your model should refresh.
 
 ## jscad-utils
 
@@ -12,7 +14,7 @@ The example project uses [jscad-utils](https://www.npmjs.com/package/jscad-utils
 
 ## Other libraries
 
-You can search [NPM](https://www.npmjs.com/search?q=jscad) for other jscad libraries. Installing them with NPM and running `gulp` should create a `dist/vdoveplate.jscad` will all dependencies injected into the file.
+You can search [NPM](https://www.npmjs.com/search?q=jscad) for other jscad libraries. Installing them with NPM and running `gulp` should create a `dist/guide-mount.jscad` will all dependencies injected into the file.
 
 For example, to load a RaspberryPi jscad library and show a Raspberry Pi Model B, install jscad-raspberrypi using `npm install --save jscad-raspberrypi`. Then return a combined `BPlus` group from the `main()` function.
 
@@ -29,7 +31,7 @@ main()   util.init(CSG);
 
 ## OpenJSCAD.org
 
-If you publish the `dist/vdoveplate.jscad` file, you can open it directly in
+If you publish the `dist/guide-mount.jscad` file, you can open it directly in
 
 <openjscad.org> by using the following URL: <code>
   <a href="http://openjscad.org/#">http://openjscad.org/#</a>
