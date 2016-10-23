@@ -2,7 +2,7 @@
 
 > vixen dovetail plate adapter
 
-[Live Example](https://raw.githubusercontent.com/johnwebbcole/guide-mount/master/dist/vdoveplate.jscad)
+[Live Example](http://openjscad.org/#https://raw.githubusercontent.com/johnwebbcole/guide-mount/master/dist/vdoveplate.jscad)
 
 ## Running
 
