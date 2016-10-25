@@ -299,12 +299,18 @@ function main(params) {
         .snap('head', mount.parts.verticalplate, 'z', 'outside+')
         .snap('head', mount.parts.verticalplate, 'x', 'inside+');
 
+    var handle = Parts.Cylinder(inch(1.5), 4)
+        .align(vertbolt.parts.head, 'xy')
+        .snap(clamp, 'z', 'outside-')
+        .color('lightgreen', 0.6);
+
     return union([
+        handle,
         nut.align(vertbolt.parts.head, 'xy').snap(clamp, 'z', 'outside-'),
         vertbolt.combine(),
         // aznut.combine(),
         // mount.combine('azbase,aznut-r'),
-        mount.combine(),
+        mount.combine().subtract(vertbolt.combine('clearance')),
         bolts.combine()
     ]);
 
