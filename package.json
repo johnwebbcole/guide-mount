@@ -1,10 +1,10 @@
 {
-    "name": "vdoveplate",
+    "name": "guide-mount",
     "version": "1.0.0",
     "description": "vixen dovetail plate adapter",
     "main": "main.jscad",
     "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1"
+        "test": "echo \"Error: no test specified\" && exit 0"
     },
     "author": "John Cole",
     "license": "ISC",

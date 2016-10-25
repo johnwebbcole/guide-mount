@@ -12,12 +12,12 @@ gulp.task('clean', function (done) {
 });
 
 gulp.task('inject', function () {
-    return gulp.src('vdoveplate.jscad')
+    return gulp.src('guide-mount.jscad')
         .pipe(plugins.plumber())
         .pipe(plugins.inject(
             plugins.merge(
                 gulp.src('node_modules/**/jscad.json').pipe(plugins.jscadFiles()),
-                gulp.src(['!vdoveplate.jscad', '*.jscad'])), {
+                gulp.src(['!guide-mount.jscad', '*.jscad'])), {
                 relative: true,
                 starttag: '// include:js',
                 endtag: '// endinject',
