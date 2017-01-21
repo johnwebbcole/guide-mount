@@ -4,6 +4,7 @@
 // file       : vdoveplate.jscad
 
 /* exported main, getParameterDefinitions */
+// console.trace('main', include, self.relpath, e);
 
 function getParameterDefinitions() {
     var parts = {
@@ -13,6 +14,7 @@ function getParameterDefinitions() {
         azmount: 'azmount',
         verthandletop: 'vert handle top',
         verthandlebot: 'vert handle bot',
+        altitudedial: 'altitude dial',
         assembled: 'assembled'
     };
 
@@ -21,48 +23,60 @@ function getParameterDefinitions() {
         type: 'choice',
         values: [0, 1, 2, 3, 4],
         captions: ['very low (6,16)', 'low (8,24)', 'normal (12,32)', 'high (24,64)', 'very high (48,128)'],
-        initial: 0,
+        initial: 1,
         caption: 'Resolution:'
+    }, {
+        name: 'length',
+        type: 'int',
+        caption: 'Length:',
+        initial: 150
     }, {
         name: 'part',
         type: 'choice',
-        values: _.keys(parts),
-        captions: _.values(parts),
+        values: Object.keys(parts),
+        captions: Object.keys(parts).map(function (key) {
+            return parts[key];
+        }),
         initial: 'assembled',
         caption: 'Part:'
+    }, {
+        name: 'printbom',
+        type: 'checkbox',
+        caption: 'Print BOM:',
+        checked: true
     }];
 }
 
-function inch(x) {
-    return x * 25.4;
-}
+// function inch(x) {
+//     return x * 25.4;
+// }
 
-function cm(x) {
-    return x / 25.4;
-}
+// function cm(x) {
+//     return x / 25.4;
+// }
 
-/**
- * Create a Losmondy style plate.
- * Losmondy plate dimensions from https://stargazerslounge.com/topic/181088-losmandy-dovetail-dimensions/
- * @param {number} length length of the plate
- */
-function LPlate(length) {
-    var base = Parts.Cube([length, inch(2.95), inch(0.235)])
-        .bisect('y', 0, -30, 'x', 0)
-        .parts.negative
-        .bisect('y', -0, 30, 'x', 0)
-        .parts.positive
-        .Center();
-
-    var plate = Parts.Cube([length, inch(4), inch(0.265)])
-        .align(base, 'xy')
-        .snap(base, 'z', 'outside-');
-
-    return union([
-        base,
-        plate
-    ]).color('gray');
-}
+// /**
+//  * Create a Losmondy style plate.
+//  * Losmondy plate dimensions from https://stargazerslounge.com/topic/181088-losmandy-dovetail-dimensions/
+//  * @param {number} length length of the plate
+//  */
+// function LPlate(length) {
+//     var base = Parts.Cube([length, inch(2.95), inch(0.235)])
+//         .bisect('y', 0, -30, 'x', 0)
+//         .parts.negative
+//         .bisect('y', -0, 30, 'x', 0)
+//         .parts.positive
+//         .Center();
+//
+//     var plate = Parts.Cube([length, inch(4), inch(0.265)])
+//         .align(base, 'xy')
+//         .snap(base, 'z', 'outside-');
+//
+//     return union([
+//         base,
+//         plate
+//     ]).color('gray');
+// }
 
 function VPlate(length) {
     // vixen dimensions from http://www.ioptron.com/v/Manuals/8422-115_CAD.jpg
@@ -79,7 +93,7 @@ function VPlate(length) {
 }
 
 function main(params) {
-
+    // console.log('guide_mount', params);
     var resolutions = [
         [6, 16],
         [8, 24],
@@ -91,11 +105,11 @@ function main(params) {
     CSG.defaultResolution2D = resolutions[params.resolution][1];
     util.init(CSG);
 
-    var length = 120;
-
-    var hole = Parts.Cylinder(inch(0.2660), inch(1));
-    var hole2 = Parts.Cylinder(inch(1 / 2), inch(7 / 32));
-    var base, halfdove, notch;
+    var inch = util.inch;
+    var toImperial = util.cm;
+    // var hole = Parts.Cylinder(inch(0.2660), inch(1));
+    // var hole2 = Parts.Cylinder(inch(1 / 2), inch(7 / 32));
+    // var base, halfdove, notch;
 
     // if (true) {
     //     return LPlate(length)
@@ -117,35 +131,86 @@ function main(params) {
     //
     // console.log(foo.parts);
     // return foo.combine()
+    // var boltsizes = {
+    //     '1/4': {
+    //         screwSize: inch(0.25),
+    //         clearance: {
+    //             close: (inch(17 / 64) - inch(0.25)) / 2,
+    //             normal: (inch(9 / 32) - inch(0.25)) / 2,
+    //             loose: (inch(19 / 64) - inch(0.25)) / 2
+    //         }
+    //     }
+    // };
+    // console.log('boltsizes', boltsizes);
 
-    function bolt(length, head) {
-        // console.log('bolt', length, cm(length));
-        var b = Parts.Hardware.PanHeadScrew(head || inch(0.375), inch(0.25), inch(0.25), length);
-        // b.add(Parts.Hardware.PanHeadScrew(inch(0.375), inch(0.25), inch(0.25), length), 'clearance');
-        //
-        b.add(Parts.Hardware.PanHeadScrew(head || inch(0.48), inch(0.25) + inch(0.0625), inch(0.28125), length, inch(1)), 'clearance', false, 'clearance'); // washer size
+    /**
+     * http://www.americanfastener.com/cap-screws/
+     * E - Body Diameter
+     * F - Width Across Flats
+     * G - Width Across Corners
+     * H - Head Height
+     * @type {Object}
+     */
+    var boltsizes = {
+        '1/4': {
+            E: inch(0.25),
+            tap: inch(0.2010),
+            close: inch(0.2570),
+            loose: inch(0.2660),
+            H: inch(5 / 32),
+            G: inch(0.505),
+            F: inch(7 / 16)
+        }
+    };
+
+    var BOM = {};
+
+    function bolt(length, type) {
+        type = type || '1/4'
+        var s = boltsizes[type];
+
+        // Keep track of bolts for bill-of-materials
+        var bomkey = `${type} - ${toImperial(length).toFixed(2)}`;
+        if (!BOM[bomkey]) BOM[bomkey] = 0;
+        BOM[bomkey]++;
+
+        var b = Parts.Hardware.HexHeadScrew(s.G, s.H, s.E, length);
+
+        var clearance = s.loose - s.E;
+
+        b.add(Parts.Hardware.HexHeadScrew((s.G) + clearance, s.H + clearance, s.loose, length).map(part => part.color('red')), 'clearance', false, 'clearance'); // washer
+
         return b;
     }
 
-    var boltM6 = Parts.Hardware.PanHeadScrew(8.5, 5, 5, 65);
+    // var b = bolt(10)
+    // return union([
+    //   Parts.Cube([20, 20, 10]).Center()
+    //   .subtract(b.combine('clearance')), //.bisect('x').parts.positive,
+    //   // b.combine(),
+    //   // b.combine('clearance').translate([0, inch(0.25), 0])
+    // ]);
+
+    // var boltM6 = Parts.Hardware.PanHeadScrew(8.5, 5, 5, 65);
     var bolt14x1 = bolt(inch(1));
 
     var bolts = util.group(); // add the bolts to another group for assembled view
 
-    var vplate = VPlate(length).rotateY(180).Zero();
+    var vplate = VPlate(params.length).rotateY(180).Zero();
 
     var clamp = Parts.BBox(vplate.enlarge(0, 20, 15)).Zero();
 
-    var p1 = clamp.subtract(vplate).bisect('y', 20);
-    var p2 = p1.parts.negative.bisect('y', -20);
+    var p1 = clamp.subtract(vplate).bisect('y', 20); // split the clamp
+    var p2 = p1.parts.negative.bisect('y', -20); // split the left side of the clamp
+    var c1 = p2.parts.positive.bisect('x', params.length / 3, 15); // split the center 1/3 of the way
+    var c2 = c1.parts.positive.bisect('x', -params.length / 3, -15); // split the center front
 
-    var c1 = p2.parts.positive.bisect('x', length / 3, 15);
-    var c2 = c1.parts.positive.bisect('x', -length / 3, -15);
-
-    // console.log(util.triangle.solve90SA({
-    //     B: 75,
-    //     b: 15
-    // }));
+    /*
+      L1 C1 R1 == p2- c2+ p1+
+      L2 C2 R2 ==     c2-
+      L3 C3 R3 ==     c1-
+     */
+    // center bolt
     var clampbolt = bolt(inch(2.5))
         .rotate(c2.parts.negative, 'x', 90)
         .align('head', c2.parts.negative, 'xz')
@@ -221,7 +286,7 @@ function main(params) {
         .snap(mount.parts.rightverticalpiviot, 'z', 'outside-')
         .color('blue'), 'verticalplate', true);
 
-    var azmount = Parts.Cylinder(120, 15)
+    var azmount = Parts.Cylinder(120, 20)
         .snap(mount.parts.verticalplate, 'z', 'outside-')
         .snap(mount.parts.verticalplate, 'x', 'inside-');
 
@@ -264,7 +329,7 @@ function main(params) {
 
     var scopebolts = util.group();
     scopebolts.add(bolt14x1.clone(), 'bolt1', false, 'bolt1');
-    scopebolts.add(bolt14x1.clone().translate([inch(1), 0, 0]), 'bolt2', false, 'bolt2');
+    scopebolts.add(bolt14x1.clone().translate([inch(0.975), 0, 0]), 'bolt2', false, 'bolt2');
     scopebolts.snap('bolt1head', azmount, 'z', 'inside-');
     scopebolts.align('bolt1head,bolt2head', mount.parts.aztooth, 'xy');
     // console.log('bolt', scopebolts.parts);
@@ -336,7 +401,7 @@ function main(params) {
     //
     // var azadjsize = azadj.combine('bracket1,bracket2').size();
     //
-    // azadj.add(Parts.Cube([azadjsize.x, azadjsize.y, (azadjsize.z / 2) - 1.5])
+    // azadj.add(Parts.Cube([azadjsize.x, azadjsize.y,g (azadjsize.z / 2) - 1.5])
     //     .snap(mount.parts.azbase, 'z', 'outside+')
     //     .align(azadj.parts.nut, 'xy')
     //     .fillet(-2, 'z+').color('green'),
@@ -360,7 +425,7 @@ function main(params) {
     bolts.add(bolts.parts.azbolt_r.mirroredY(), 'azbolt_l');
 
 
-    bolts.add(bolt(inch(2), inch(0.6))
+    bolts.add(bolt(inch(2))
         .snap('head', vplate, 'z', 'outside-')
         .snap('head', mount.parts.verticalplate, 'x', 'inside+')
         .align('head', mount.parts.verticalplate, 'y')
@@ -377,19 +442,41 @@ function main(params) {
         .snap(mount.parts.verticalplate, 'z', 'outside-')
         .translate([0, 0, 2]), 'vertbolt_nut3');
 
-    mount.add(Parts.Cylinder(35, 6)
-        .align(bolts.parts.vertbolthead, 'xy')
-        .snap(mount.parts.verticalplate, 'z', 'outside-')
-        .color('lightgreen'), 'handle');
+    // var handle = Gears.involuteGear({
+    //     thickness: 6,
+    //     outerRadius: 35,
+    //     baseRadius: 34,
+    //     circularPitch: 1
+    // });
+    //
+    // mount.add(
+    //     handle
+    //     .align(bolts.parts.vertbolthead, 'xy')
+    //     .snap(mount.parts.verticalplate, 'z', 'outside-')
+    //     .color('lightgreen'), 'handle');
+    //
+    // mount.add(mount.parts.handle
+    //     .snap(mount.parts.verticalplate, 'z', 'outside+'), 'handle2');
 
-    mount.add(mount.parts.handle
-        .snap(mount.parts.verticalplate, 'z', 'outside+'), 'handle2');
 
     // console.log(bolts.parts);
     var parts = {
+        altitudedial: function () {
+            // return Gears.involuteGear({
+            return Gears.placeHolder({
+                    thickness: 6,
+                    outerRadius: 35,
+                    baseRadius: 34,
+                    circularPitch: 1
+                })
+                .align(bolts.parts.vertbolthead, 'xy')
+                .snap(mount.parts.verticalplate, 'z', 'outside-')
+                .color('lightgreen');
+        },
         left: function () {
             return mount.combine('left,leftverticalpiviot')
-                .subtract(union(bolts.combine('vertboltclearance')));
+                .subtract(union(bolts.combine('vertboltclearance')))
+                // .union(bolts.combine('vertbolt'));
         },
         right: function () {
             return mount.combine('right');
@@ -402,32 +489,46 @@ function main(params) {
         azmount: function () {
             return mount.combine('azmount');
         },
-        verthandletop: function () {
-            return mount.combine('handle').subtract(union(
+        verthandletop: function (dial) {
+            dial = dial || parts.altitudedial();
+            return dial.subtract(union(
                 bolts.combine('vertboltclearance'),
                 bolts.parts.vertbolt_nut3
             ));
         },
-        verthandlebot: function () {
-            return mount.combine('handle2').subtract(union(
-                bolts.combine('vertboltclearance'),
-                bolts.parts.vertbolt_nut2
-            ));
+        verthandlebot: function (dial) {
+            dial = dial || parts.altitudedial();
+            return dial
+                .snap(mount.parts.verticalplate, 'z', 'outside+')
+                .subtract(union(
+                    bolts.combine('vertboltclearance'),
+                    bolts.parts.vertbolt_nut2
+                ));
         },
         assembled: function () {
+            var dial = parts.altitudedial();
             return union([
                 parts.left(),
                 parts.right(),
                 parts.azbase(),
                 parts.azmount(),
-                // bolts.combine(),
-                // parts.verthandletop(),
-                // parts.verthandlebot()
+                bolts.combine(),
+                parts.verthandletop(dial),
+                parts.verthandlebot(dial)
             ]);
         }
     };
 
-    return parts[params.part]();
+    var part = parts[params.part]();
+
+    if (params.printbom) {
+        console.info('BOM:')
+        Object.keys(BOM).forEach(function (key) {
+            console.info(`${key} inch: ${BOM[key]}`);
+        });
+    }
+    // console.log('done');
+    return part;
 }
 
 // ********************************************************
