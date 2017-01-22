@@ -16,7 +16,7 @@ gulp.task('inject', function () {
         .pipe(plugins.plumber())
         .pipe(plugins.inject(
             plugins.merge(
-                gulp.src('node_modules/**/jscad.json').pipe(plugins.jscadFiles()),
+                gulp.src('package.json').pipe(plugins.jscadFiles()),
                 gulp.src(['!guide-mount.jscad', '*.jscad'])), {
                 relative: true,
                 starttag: '// include:js',

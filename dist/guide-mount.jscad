@@ -4,6 +4,10 @@
 // file       : vdoveplate.jscad
 
 /* exported main, getParameterDefinitions */
+/* global Gears, console */
+/*eslint no-console: ["error", { allow: ["info", "warn", "error"] }] */
+
+// console.trace('main', include, self.relpath, e);
 
 function getParameterDefinitions() {
     var parts = {
@@ -13,65 +17,71 @@ function getParameterDefinitions() {
         azmount: 'azmount',
         verthandletop: 'vert handle top',
         verthandlebot: 'vert handle bot',
+        altitudedial: 'altitude dial',
         assembled: 'assembled'
     };
 
-    return [{
-        name: 'resolution',
-        type: 'choice',
-        values: [0, 1, 2, 3, 4],
-        captions: ['very low (6,16)', 'low (8,24)', 'normal (12,32)', 'high (24,64)', 'very high (48,128)'],
-        initial: 0,
-        caption: 'Resolution:'
-    }, {
-        name: 'part',
-        type: 'choice',
-        values: _.keys(parts),
-        captions: _.values(parts),
-        initial: 'assembled',
-        caption: 'Part:'
-    }];
+    return [
+        {
+            name: 'resolution',
+            type: 'choice',
+            values: [ 0, 1, 2, 3, 4 ],
+            captions: [ 'very low (6,16)', 'low (8,24)', 'normal (12,32)', 'high (24,64)', 'very high (48,128)' ],
+            initial: 1,
+            caption: 'Resolution:'
+        },
+        { name: 'length', type: 'int', caption: 'Length:', initial: 150 },
+        {
+            name: 'part',
+            type: 'choice',
+            values: Object.keys(parts),
+            captions: Object.keys(parts).map(function(key) {
+                return parts[key];
+            }),
+            initial: 'assembled',
+            caption: 'Part:'
+        },
+        { name: 'printbom', type: 'checkbox', caption: 'Print BOM:', checked: true }
+    ];
 }
 
-function inch(x) {
-    return x * 25.4;
-}
-
-function cm(x) {
-    return x / 25.4;
-}
-
-/**
- * Create a Losmondy style plate.
- * Losmondy plate dimensions from https://stargazerslounge.com/topic/181088-losmandy-dovetail-dimensions/
- * @param {number} length length of the plate
- */
-function LPlate(length) {
-    var base = Parts.Cube([length, inch(2.95), inch(0.235)])
-        .bisect('y', 0, -30, 'x', 0)
-        .parts.negative
-        .bisect('y', -0, 30, 'x', 0)
-        .parts.positive
-        .Center();
-
-    var plate = Parts.Cube([length, inch(4), inch(0.265)])
-        .align(base, 'xy')
-        .snap(base, 'z', 'outside-');
-
-    return union([
-        base,
-        plate
-    ]).color('gray');
-}
-
+// function inch(x) {
+//     return x * 25.4;
+// }
+// function cm(x) {
+//     return x / 25.4;
+// }
+// /**
+//  * Create a Losmondy style plate.
+//  * Losmondy plate dimensions from https://stargazerslounge.com/topic/181088-losmandy-dovetail-dimensions/
+//  * @param {number} length length of the plate
+//  */
+// function LPlate(length) {
+//     var base = Parts.Cube([length, inch(2.95), inch(0.235)])
+//         .bisect('y', 0, -30, 'x', 0)
+//         .parts.negative
+//         .bisect('y', -0, 30, 'x', 0)
+//         .parts.positive
+//         .Center();
+//
+//     var plate = Parts.Cube([length, inch(4), inch(0.265)])
+//         .align(base, 'xy')
+//         .snap(base, 'z', 'outside-');
+//
+//     return union([
+//         base,
+//         plate
+//     ]).color('gray');
+// }
 function VPlate(length) {
     // vixen dimensions from http://www.ioptron.com/v/Manuals/8422-115_CAD.jpg
-
-    var base = Parts.Cube([length, 44.5, 15])
-        .bisect('y', 0, -15, 'x', 0)
-        .parts.negative
-        .bisect('y', -0, 15, 'x', 0)
-        .parts.positive
+    var base = Parts.Cube([ length, 44.5, 15 ]).bisect('y', 0, -15, 'x', 0).parts.negative.bisect(
+        'y',
+        -0,
+        15,
+        'x',
+        0
+    ).parts.positive
         .Center()
         .color('gray');
 
@@ -79,24 +89,17 @@ function VPlate(length) {
 }
 
 function main(params) {
-
-    var resolutions = [
-        [6, 16],
-        [8, 24],
-        [12, 32],
-        [24, 64],
-        [48, 128]
-    ];
+    // console.log('guide_mount', params);
+    var resolutions = [ [ 6, 16 ], [ 8, 24 ], [ 12, 32 ], [ 24, 64 ], [ 48, 128 ] ];
     CSG.defaultResolution3D = resolutions[params.resolution][0];
     CSG.defaultResolution2D = resolutions[params.resolution][1];
     util.init(CSG);
 
-    var length = 120;
-
-    var hole = Parts.Cylinder(inch(0.2660), inch(1));
-    var hole2 = Parts.Cylinder(inch(1 / 2), inch(7 / 32));
-    var base, halfdove, notch;
-
+    var inch = util.inch;
+    var toImperial = util.cm;
+    // var hole = Parts.Cylinder(inch(0.2660), inch(1));
+    // var hole2 = Parts.Cylinder(inch(1 / 2), inch(7 / 32));
+    // var base, halfdove, notch;
     // if (true) {
     //     return LPlate(length)
     //         .subtract(union([
@@ -111,41 +114,102 @@ function main(params) {
     //
     // }
     //
-
     // var lplate = LPlate(length);
     // var foo = Parts.Hardware.PanHeadScrew(inch(0.48), inch(0.25) + inch(0.0625), inch(0.28125), inch(2), inch(1));
     //
     // console.log(foo.parts);
     // return foo.combine()
+    // var boltsizes = {
+    //     '1/4': {
+    //         screwSize: inch(0.25),
+    //         clearance: {
+    //             close: (inch(17 / 64) - inch(0.25)) / 2,
+    //             normal: (inch(9 / 32) - inch(0.25)) / 2,
+    //             loose: (inch(19 / 64) - inch(0.25)) / 2
+    //         }
+    //     }
+    // };
+    // console.log('boltsizes', boltsizes);
+    /**
+     * http://www.americanfastener.com/cap-screws/
+     * E - Body Diameter
+     * F - Width Across Flats
+     * G - Width Across Corners
+     * H - Head Height
+     * @type {Object}
+     */
+    var boltsizes = {
+        '1/4': {
+            E: inch(0.25),
+            tap: inch(0.2010),
+            close: inch(0.2570),
+            loose: inch(0.2660),
+            H: inch(5 / 32),
+            G: inch(0.505),
+            F: inch(7 / 16)
+        }
+    };
 
-    function bolt(length, head) {
-        // console.log('bolt', length, cm(length));
-        var b = Parts.Hardware.PanHeadScrew(head || inch(0.375), inch(0.25), inch(0.25), length);
-        // b.add(Parts.Hardware.PanHeadScrew(inch(0.375), inch(0.25), inch(0.25), length), 'clearance');
-        //
-        b.add(Parts.Hardware.PanHeadScrew(head || inch(0.48), inch(0.25) + inch(0.0625), inch(0.28125), length, inch(1)), 'clearance', false, 'clearance'); // washer size
+    var BOM = {};
+
+    function bolt(length, type) {
+        type = type || '1/4';
+        var s = boltsizes[type];
+
+        // Keep track of bolts for bill-of-materials
+        var bomkey = `${type} - ${toImperial(length).toFixed(2)}`;
+        if (!BOM[bomkey]) BOM[bomkey] = 0;
+        BOM[bomkey]++;
+
+        var b = Parts.Hardware.HexHeadScrew(s.G, s.H, s.E, length);
+
+        var clearance = s.loose - s.E;
+
+        b.add(
+            Parts.Hardware
+                .HexHeadScrew(s.G + clearance, s.H + clearance, s.loose, length)
+                .map(part => part.color('red')),
+            'clearance',
+            false,
+            'clearance'
+        );
+
+        // washer
         return b;
     }
 
-    var boltM6 = Parts.Hardware.PanHeadScrew(8.5, 5, 5, 65);
+    // var b = bolt(10)
+    // return union([
+    //   Parts.Cube([20, 20, 10]).Center()
+    //   .subtract(b.combine('clearance')), //.bisect('x').parts.positive,
+    //   // b.combine(),
+    //   // b.combine('clearance').translate([0, inch(0.25), 0])
+    // ]);
+    // var boltM6 = Parts.Hardware.PanHeadScrew(8.5, 5, 5, 65);
     var bolt14x1 = bolt(inch(1));
 
-    var bolts = util.group(); // add the bolts to another group for assembled view
+    var bolts = util.group();
 
-    var vplate = VPlate(length).rotateY(180).Zero();
+    // add the bolts to another group for assembled view
+    var vplate = VPlate(params.length).rotateY(180).Zero();
 
     var clamp = Parts.BBox(vplate.enlarge(0, 20, 15)).Zero();
 
     var p1 = clamp.subtract(vplate).bisect('y', 20);
+    // split the clamp
     var p2 = p1.parts.negative.bisect('y', -20);
+    // split the left side of the clamp
+    var c1 = p2.parts.positive.bisect('x', params.length / 3, 15);
+    // split the center 1/3 of the way
+    var c2 = c1.parts.positive.bisect('x', (-params.length) / 3, -15);
 
-    var c1 = p2.parts.positive.bisect('x', length / 3, 15);
-    var c2 = c1.parts.positive.bisect('x', -length / 3, -15);
-
-    // console.log(util.triangle.solve90SA({
-    //     B: 75,
-    //     b: 15
-    // }));
+    // split the center front
+    /*
+        L1 C1 R1 == p2- c2+ p1+
+        L2 C2 R2 ==     c2-
+        L3 C3 R3 ==     c1-
+       */
+    // center bolt
     var clampbolt = bolt(inch(2.5))
         .rotate(c2.parts.negative, 'x', 90)
         .align('head', c2.parts.negative, 'xz')
@@ -153,31 +217,32 @@ function main(params) {
 
     var mount = util.group();
 
-    mount.add(union([c1.parts.negative,
-            c2.parts.positive,
-            p1.parts.positive
-        ]).bisect('y', -8).parts.positive
-        .color('orange')
-        .subtract(clampbolt.combine('clearance')), 'left');
+    mount.add(
+        union([ c1.parts.negative, c2.parts.positive, p1.parts.positive ]).bisect('y', -8).parts.positive
+            .color('orange')
+            .subtract(clampbolt.combine('clearance')),
+        'left'
+    );
 
     bolts.add(clampbolt.combine('head,thread'), 'clampbolt');
 
     var center = c2.parts.negative.enlarge(-1, 0, 0);
 
-    mount.add(union([center,
-            p2.parts.negative
-        ]).bisect('y', 8).parts.negative
-        .color('green')
-        .subtract(clampbolt.combine('clearance')), 'right');
+    mount.add(
+        union([ center, p2.parts.negative ]).bisect('y', 8).parts.negative
+            .color('green')
+            .subtract(clampbolt.combine('clearance')),
+        'right'
+    );
 
     var size = clamp.size();
     // console.log('size', size);
-    var cyl = Parts.Cylinder(20, size.y)
+    var cyl = Parts
+        .Cylinder(20, size.y)
         .rotateX(90)
         .snap(clamp, 'x', 'inside-')
         .snap(clamp, 'z', 'outside-')
         .align(clamp, 'y')
-        // .translate([4, 0, 2])
         .bisect('y');
 
     // var cylbox = Parts.BBox(cyl);
@@ -188,104 +253,103 @@ function main(params) {
 
     var cylsize = cyl.parts.positive.size();
 
-    mount.add(union(cyl.parts.positive,
-            Parts.BBox(cyl.parts.positive)
-            .bisect('z').parts.negative //,
+    mount.add(
+        union(
+            cyl.parts.positive,
+            //,
             // Parts.Cube([cylsize.x, cylsize.y, 2])
             // .align(cyl.parts.positive, 'xy')
             // .snap(cyl.parts.positive, 'z', 'outside+')
             // .fillet(-1.99, 'z-')
-        )
-        .subtract(vertpivotbolt.combine('clearance'))
-        // .fillet(-2, 'z-')
-        .subtract(cyl.parts.negative)
-        .color('lightblue'), 'leftverticalpiviot');
+            Parts.BBox(cyl.parts.positive).bisect('z').parts.negative
+        ).subtract(vertpivotbolt.combine('clearance')).subtract(cyl.parts.negative).color('lightblue'),
+        'leftverticalpiviot'
+    );
 
     bolts.add(vertpivotbolt.combine('head,thread'), 'vertpivotbolt');
 
-    mount.add(union(cyl.parts.negative,
-            Parts.BBox(cyl.parts.negative)
-            .bisect('z').parts.positive //,
+    mount.add(
+        union(
+            cyl.parts.negative,
+            //,
             // Parts.Cube([cylsize.x, cylsize.y, 2])
             // .align(cyl.parts.negative, 'xy')
             // .snap(cyl.parts.negative, 'z', 'outside-')
             // .fillet(-1.99, 'z+')
-        )
-        .subtract(vertpivotbolt.combine('clearance'))
-        // .fillet(-2, 'z+')
-        .subtract(cyl.parts.positive)
-        .color('orange'), 'rightverticalpiviot');
+            Parts.BBox(cyl.parts.negative).bisect('z').parts.positive
+        ).subtract(vertpivotbolt.combine('clearance')).subtract(cyl.parts.positive).color('orange'),
+        'rightverticalpiviot'
+    );
 
-    mount.add(Parts.Board(size.x, size.y, 2, 10)
-        .align(clamp, 'xy')
-        .snap(mount.parts.rightverticalpiviot, 'z', 'outside-')
-        .color('blue'), 'verticalplate', true);
+    mount.add(
+        Parts
+            .Board(size.x, size.y, 2, 10)
+            .align(clamp, 'xy')
+            .snap(mount.parts.rightverticalpiviot, 'z', 'outside-')
+            .color('blue'),
+        'verticalplate',
+        true
+    );
 
-    var azmount = Parts.Cylinder(120, 15)
+    var azmount = Parts
+        .Cylinder(120, 20)
         .snap(mount.parts.verticalplate, 'z', 'outside-')
         .snap(mount.parts.verticalplate, 'x', 'inside-');
 
     var azsize = azmount.size();
-    var toothoffset = (cylsize.x * 2) + 5;
+    var toothoffset = cylsize.x * 2 + 5;
 
-    var ring = Parts.Tube(azsize.x - toothoffset, azsize.y - (toothoffset + 20), 20)
+    var ring = Parts
+        .Tube(azsize.x - toothoffset, azsize.y - (toothoffset + 20), 20)
         .snap(azmount, 'z', 'outside+')
         .align(azmount, 'xy');
 
-    var channel = ring
-        .bisect('y', null, -15, 'z', null, {
-            cutDelta: [0, 0, 0],
-            rotationCenter: ring.centroid()
-        })
-        .parts.positive
-        .bisect('y', null, 15, 'z', null, {
-            cutDelta: [0, 0, 0],
-            rotationCenter: ring.centroid()
-        })
-        .parts.negative;
+    var channel = ring.bisect('y', null, -15, 'z', null, {
+        cutDelta: [ 0, 0, 0 ],
+        rotationCenter: ring.centroid()
+    }).parts.positive.bisect('y', null, 15, 'z', null, {
+        cutDelta: [ 0, 0, 0 ],
+        rotationCenter: ring.centroid()
+    }).parts.negative;
 
     var toothgap = 2;
-    mount.add(Parts.Tube(azsize.x - (toothoffset + toothgap), (azsize.y + toothgap) - (toothoffset + 20), 20)
-        .snap(azmount, 'z', 'outside+')
-        .align(azmount, 'xy')
-        .bisect('y', null, -5, 'z', null, {
-            cutDelta: [0, 0, 0],
+    mount.add(
+        Parts
+            .Tube(azsize.x - (toothoffset + toothgap), azsize.y + toothgap - (toothoffset + 20), 20)
+            .snap(azmount, 'z', 'outside+')
+            .align(azmount, 'xy')
+            .bisect('y', null, -5, 'z', null, {
+                cutDelta: [ 0, 0, 0 ],
+                rotationCenter: ring.centroid()
+            }).parts.positive.bisect('y', null, 5, 'z', null, {
+            cutDelta: [ 0, 0, 0 ],
             rotationCenter: ring.centroid()
-        })
-        .parts.positive
-        .bisect('y', null, 5, 'z', null, {
-            cutDelta: [0, 0, 0],
-            rotationCenter: ring.centroid()
-        })
-        .parts.negative
-        .fillet(-2, 'z+').color('pink'),
-        'aztooth');
-
+        }).parts.negative
+            .fillet(-2, 'z+')
+            .color('pink'),
+        'aztooth'
+    );
 
     var scopebolts = util.group();
     scopebolts.add(bolt14x1.clone(), 'bolt1', false, 'bolt1');
-    scopebolts.add(bolt14x1.clone().translate([inch(1), 0, 0]), 'bolt2', false, 'bolt2');
+    scopebolts.add(bolt14x1.clone().translate([ inch(0.975), 0, 0 ]), 'bolt2', false, 'bolt2');
     scopebolts.snap('bolt1head', azmount, 'z', 'inside-');
     scopebolts.align('bolt1head,bolt2head', mount.parts.aztooth, 'xy');
     // console.log('bolt', scopebolts.parts);
-
-    mount.add(bolt(inch(1))
-        .rotate(azmount, 'x', 180)
-        .align('head', azmount, 'xy')
-        .snap('head', azmount, 'z', 'inside+'),
-        'azbolt', true, 'azbolt');
+    mount.add(
+        bolt(inch(1)).rotate(azmount, 'x', 180).align('head', azmount, 'xy').snap('head', azmount, 'z', 'inside+'),
+        'azbolt',
+        true,
+        'azbolt'
+    );
 
     bolts.add(mount.combine('azbolthead,azboltthread'), 'azbolt');
 
-    mount.add(mount.parts.verticalplate
-        .subtract(
-            union(mount.parts.azboltclearance,
-                channel
-            )), 'azbase');
+    mount.add(mount.parts.verticalplate.subtract(union(mount.parts.azboltclearance, channel)), 'azbase');
 
     var azmountholes = union(
         scopebolts.combine('bolt1clearance,bolt2clearance'),
-        scopebolts.combine('bolt1clearance,bolt2clearance').translate([0, 0, -5]),
+        scopebolts.combine('bolt1clearance,bolt2clearance').translate([ 0, 0, -5 ]),
         mount.combine('azboltclearance')
     );
 
@@ -293,143 +357,184 @@ function main(params) {
 
     var azclip = (azsize.y - size.y) / 2;
 
-    mount.add(azmount
-        .intersect(azmount.bisect('y', azclip)
-            .parts.negative
-            .bisect('y', -azclip)
-            .parts.positive
-            .translate([-30, 0, 0]))
-        .union(mount.parts.aztooth)
-        .subtract(azmountholes)
-        .color('yellow'), 'azmount');
+    mount.add(
+        azmount
+            .intersect(
+                azmount.bisect('y', azclip).parts.negative.bisect('y', -azclip).parts.positive.translate([ -30, 0, 0 ])
+            )
+            .union(mount.parts.aztooth)
+            .subtract(azmountholes)
+            .color('yellow'),
+        'azmount'
+    );
 
     var nut = Parts.Hexagon(12.5, 5.6).color('darkgray');
     var azadj = util.group();
-    azadj.add(nut
-        .rotateX(90)
-        .enlarge([1, 1, 1])
-        .align(mount.parts.aztooth, 'x')
-        .snap(mount.parts.azbase, 'y', 'inside+')
-        .snap(mount.parts.azbase, 'z', 'outside+')
-        .translate([0, -9, 0])
-        .color('pink'), 'nut');
+    azadj.add(
+        nut
+            .rotateX(90)
+            .enlarge([ 1, 1, 1 ])
+            .align(mount.parts.aztooth, 'x')
+            .snap(mount.parts.azbase, 'y', 'inside+')
+            .snap(mount.parts.azbase, 'z', 'outside+')
+            .translate([ 0, -9, 0 ])
+            .color('pink'),
+        'nut'
+    );
 
-    azadj.add(bolt(inch(1.5))
-        .rotate(azadj.parts.nut, 'x', 90)
-        .align('head', azadj.parts.nut, 'xz')
-        .snap('thread', mount.parts.aztooth, 'y', 'outside-'),
-        'bolt', false, 'bolt');
+    azadj.add(
+        bolt(inch(1.5))
+            .rotate(azadj.parts.nut, 'x', 90)
+            .align('head', azadj.parts.nut, 'xz')
+            .snap('thread', mount.parts.aztooth, 'y', 'outside-'),
+        'bolt',
+        false,
+        'bolt'
+    );
 
-    azadj.add(Parts.Cube([30, 9, 15])
-        .align(azadj.parts.nut, 'x')
-        .snap(azadj.parts.nut, 'y', 'outside-')
-        .snap(mount.parts.azbase, 'z', 'outside+')
-        .bisect('x', -0, 30, 'y', -0).parts.negative, 'bracket1');
+    azadj.add(
+        Parts
+            .Cube([ 30, 9, 15 ])
+            .align(azadj.parts.nut, 'x')
+            .snap(azadj.parts.nut, 'y', 'outside-')
+            .snap(mount.parts.azbase, 'z', 'outside+')
+            .bisect('x', -0, 30, 'y', -0).parts.negative,
+        'bracket1'
+    );
     //
     // azadj.add(Parts.Cylinder(15, 6)
     //     .rotateX(90)
     //     .align(azadj.parts.nut, 'xz')
     //     .snap(azadj.parts.nut, 'y', 'outside-'), 'bracket1');
     //
-    azadj.add(azadj.parts.bracket1
-        .snap(azadj.parts.nut, 'y', 'outside+'), 'bracket2');
+    azadj.add(azadj.parts.bracket1.snap(azadj.parts.nut, 'y', 'outside+'), 'bracket2');
     //
     // var azadjsize = azadj.combine('bracket1,bracket2').size();
     //
-    // azadj.add(Parts.Cube([azadjsize.x, azadjsize.y, (azadjsize.z / 2) - 1.5])
+    // azadj.add(Parts.Cube([azadjsize.x, azadjsize.y,g (azadjsize.z / 2) - 1.5])
     //     .snap(mount.parts.azbase, 'z', 'outside+')
     //     .align(azadj.parts.nut, 'xy')
     //     .fillet(-2, 'z+').color('green'),
     //     'base');
+    mount.add(
+        azadj
+            .combine('bracket1,bracket2')
+            .subtract(union(azadj.parts.boltclearance.enlarge([ 1, 0, 1 ]), azadj.parts.nut, channel)),
+        'azadj_r'
+    );
 
-    mount.add(azadj.combine('bracket1,bracket2')
-        .subtract(union(azadj.parts.boltclearance.enlarge([1, 0, 1]),
-            azadj.parts.nut,
-            channel
-        )), 'azadj_r');
-
-    mount.add(mount.parts.azadj_r.mirroredY()
-        .bisect('x', 0, -30, 'y', -0).parts.positive
-        .subtract(mount.parts.leftverticalpiviot
-            .enlarge([1, 1, 1])
-            .rotate(bolts.parts.vertpivotbolt.centroid(),
-                util.rotationAxes.y, -15))
-        .color('purple'), 'azadj_l');
+    mount.add(
+        mount.parts.azadj_r.mirroredY().bisect('x', 0, -30, 'y', -0).parts.positive
+            .subtract(
+                mount.parts.leftverticalpiviot
+                    .enlarge([ 1, 1, 1 ])
+                    .rotate(bolts.parts.vertpivotbolt.centroid(), util.rotationAxes.y, -15)
+            )
+            .color('purple'),
+        'azadj_l'
+    );
 
     bolts.add(azadj.combine('bolthead,boltthread,nut'), 'azbolt_r');
     bolts.add(bolts.parts.azbolt_r.mirroredY(), 'azbolt_l');
 
+    bolts.add(
+        bolt(inch(2))
+            .snap('head', vplate, 'z', 'outside-')
+            .snap('head', mount.parts.verticalplate, 'x', 'inside+')
+            .align('head', mount.parts.verticalplate, 'y')
+            .translate([ -5, 0, 0 ]),
+        'vertbolt',
+        false,
+        'vertbolt',
+        'head,thread'
+    );
 
-    bolts.add(bolt(inch(2), inch(0.6))
-        .snap('head', vplate, 'z', 'outside-')
-        .snap('head', mount.parts.verticalplate, 'x', 'inside+')
-        .align('head', mount.parts.verticalplate, 'y')
-        .translate([-5, 0, 0]), 'vertbolt', false, 'vertbolt', 'head,thread');
+    bolts.add(nut.align(bolts.parts.vertbolt, 'xy').snap(clamp, 'z', 'outside-'), 'vertbolt_nut1');
 
-    bolts.add(nut
-        .align(bolts.parts.vertbolt, 'xy')
-        .snap(clamp, 'z', 'outside-'), 'vertbolt_nut1');
+    bolts.add(
+        bolts.parts.vertbolt_nut1.snap(mount.parts.verticalplate, 'z', 'outside+').translate([ 0, 0, -2 ]),
+        'vertbolt_nut2'
+    );
+    bolts.add(
+        bolts.parts.vertbolt_nut1.snap(mount.parts.verticalplate, 'z', 'outside-').translate([ 0, 0, 2 ]),
+        'vertbolt_nut3'
+    );
 
-    bolts.add(bolts.parts.vertbolt_nut1
-        .snap(mount.parts.verticalplate, 'z', 'outside+')
-        .translate([0, 0, -2]), 'vertbolt_nut2');
-    bolts.add(bolts.parts.vertbolt_nut1
-        .snap(mount.parts.verticalplate, 'z', 'outside-')
-        .translate([0, 0, 2]), 'vertbolt_nut3');
-
-    mount.add(Parts.Cylinder(35, 6)
-        .align(bolts.parts.vertbolthead, 'xy')
-        .snap(mount.parts.verticalplate, 'z', 'outside-')
-        .color('lightgreen'), 'handle');
-
-    mount.add(mount.parts.handle
-        .snap(mount.parts.verticalplate, 'z', 'outside+'), 'handle2');
-
+    // var handle = Gears.involuteGear({
+    //     thickness: 6,
+    //     outerRadius: 35,
+    //     baseRadius: 34,
+    //     circularPitch: 1
+    // });
+    //
+    // mount.add(
+    //     handle
+    //     .align(bolts.parts.vertbolthead, 'xy')
+    //     .snap(mount.parts.verticalplate, 'z', 'outside-')
+    //     .color('lightgreen'), 'handle');
+    //
+    // mount.add(mount.parts.handle
+    //     .snap(mount.parts.verticalplate, 'z', 'outside+'), 'handle2');
     // console.log(bolts.parts);
     var parts = {
-        left: function () {
-            return mount.combine('left,leftverticalpiviot')
-                .subtract(union(bolts.combine('vertboltclearance')));
+        altitudedial: function() {
+            // return Gears.involuteGear({
+            return Gears
+                .placeHolder({ thickness: 6, outerRadius: 35, baseRadius: 34, circularPitch: 1 })
+                .align(bolts.parts.vertbolthead, 'xy')
+                .snap(mount.parts.verticalplate, 'z', 'outside-')
+                .color('lightgreen');
         },
-        right: function () {
+        left: function() {
+            return mount.combine('left,leftverticalpiviot').subtract(union(bolts.combine('vertboltclearance')));
+            // .union(bolts.combine('vertbolt'));
+        },
+        right: function() {
             return mount.combine('right');
         },
-        azbase: function () {
-            return mount.combine('rightverticalpiviot,azbase,azadj_l,azadj_r')
-                .subtract(union(bolts.combine('vertbolt').enlarge([10, 5, 0]),
-                    vertpivotbolt.combine('clearance')));
+        azbase: function() {
+            return mount
+                .combine('rightverticalpiviot,azbase,azadj_l,azadj_r')
+                .subtract(union(bolts.combine('vertbolt').enlarge([ 10, 5, 0 ]), vertpivotbolt.combine('clearance')));
         },
-        azmount: function () {
+        azmount: function() {
             return mount.combine('azmount');
         },
-        verthandletop: function () {
-            return mount.combine('handle').subtract(union(
-                bolts.combine('vertboltclearance'),
-                bolts.parts.vertbolt_nut3
-            ));
+        verthandletop: function(dial) {
+            dial = dial || parts.altitudedial();
+            return dial.subtract(union(bolts.combine('vertboltclearance'), bolts.parts.vertbolt_nut3));
         },
-        verthandlebot: function () {
-            return mount.combine('handle2').subtract(union(
-                bolts.combine('vertboltclearance'),
-                bolts.parts.vertbolt_nut2
-            ));
+        verthandlebot: function(dial) {
+            dial = dial || parts.altitudedial();
+            return dial
+                .snap(mount.parts.verticalplate, 'z', 'outside+')
+                .subtract(union(bolts.combine('vertboltclearance'), bolts.parts.vertbolt_nut2));
         },
-        assembled: function () {
+        assembled: function() {
+            var dial = parts.altitudedial();
             return union([
                 parts.left(),
                 parts.right(),
                 parts.azbase(),
                 parts.azmount(),
-                // bolts.combine(),
-                // parts.verthandletop(),
-                // parts.verthandlebot()
+                bolts.combine(),
+                parts.verthandletop(dial),
+                parts.verthandlebot(dial)
             ]);
         }
     };
 
-    return parts[params.part]();
-}
+    var part = parts[params.part]();
 
+    if (params.printbom) {
+        console.info('BOM:');
+        Object.keys(BOM).forEach(function(key) {
+            console.info(`${key} inch: ${BOM[key]}`);
+        });
+    }
+    // console.log('done');
+    return part;
+}
 // ********************************************************
 // Other jscad libraries are injected here.  Do not remove.
 // Install jscad libraries using NPM
@@ -501,10 +606,10 @@ Boxes = {
      * This will bisect an object using a rabett join.  Returns a
      * `group` object with `positive` and `negative` parts.
      * @param {CSG} box       The object to bisect.
-     * @param {number} thickness Thickness of the objects walls.
-     * @param {number} gap       Gap between the join cheeks.
-     * @param {number} height    Offset from the bottom to bisect the object at.  Negative numbers offset from the top.
-     * @param {number} face      Size of the join face.
+     * @param {Number} thickness Thickness of the objects walls.
+     * @param {Number} gap       Gap between the join cheeks.
+     * @param {Number} height    Offset from the bottom to bisect the object at.  Negative numbers offset from the top.
+     * @param {Number} face      Size of the join face.
      * @return {group} A group object with `positive`, `negative` parts.
      * @memberof module:Boxes
      */
@@ -559,18 +664,22 @@ Boxes = {
      *}
      *
      * @param {CSG} box       A hollow object.
-     * @param {number} thickness The thickness of the object walls
-     * @param {number} gap       The gap between the top/bottom and the walls.
-     * @param {object} options   Options to have a `removableTop` or `removableBottom`.  Both default to `true`.
+     * @param {Number} thickness The thickness of the object walls
+     * @param {Number} gap       The gap between the top/bottom and the walls.
+     * @param {Object} options   Options to have a `removableTop` or `removableBottom`.  Both default to `true`.
+     * @param {Boolean} options.removableTop   The top will be removable.
+     * @param {Boolean} options.removableBottom   The bottom will be removable.
      * @return {group} An A hollow version of the original object..
      * @memberof module:Boxes
      */
     RabettTopBottom: function rabbetTMB(box, thickness, gap, options) {
         options = util.defaults(options, {
             removableTop: true,
-            removableBottom: true
+            removableBottom: true,
+            topWidth: -thickness,
+            bottomWidth: thickness
         });
-
+        // console.log('RabettTopBottom', options);
         gap = gap || 0.25;
 
         var group = util.group('', {
@@ -581,7 +690,7 @@ Boxes = {
         var outside = (-thickness) + gap;
 
         if (options.removableTop) {
-            var top = box.bisect('z', -thickness);
+            var top = box.bisect('z', options.topWidth);
             group.add(top.parts.positive.enlarge([inside, inside, 0]), 'top');
 
             if (!options.removableBottom) group.add(box.subtract(
@@ -590,7 +699,8 @@ Boxes = {
         }
 
         if (options.removableBottom) {
-            var bottom = box.bisect('z', thickness);
+            // console.log('bottomWidth', options.bottomWidth);
+            var bottom = box.bisect('z', options.bottomWidth);
 
             group.add(bottom.parts.negative.enlarge([outside, outside, 0]), 'bottomCutout', true);
 
@@ -676,7 +786,7 @@ Boxes = {
      * ![A hollowed out cylinder](jsdoc2md/rabett.png)
      *
      * @param {CSG}   object    A CSG object
-     * @param {number}   thickness The thickness of the walls.
+     * @param {Number}   thickness The thickness of the walls.
      * @param {Function} interiorcb        A callback that allows processing the object before returning.
      * * @param {Function} exteriorcb        A callback that allows processing the object before returning.
      * @return {CSG} An A hollow version of the original object..
@@ -1240,6 +1350,26 @@ Parts = {
         },
 
         /**
+         * Creates a `Group` object with a Hex Head Screw.
+         * @param {number} headDiameter Diameter of the head of the screw
+         * @param {number} headLength   Length of the head
+         * @param {number} diameter     Diameter of the threaded shaft
+         * @param {number} length       Length of the threaded shaft
+         * @param {number} clearLength  Length of the clearance section of the head.
+         * @param {object} options      Screw options include orientation and clerance scale.
+         */
+        HexHeadScrew: function (headDiameter, headLength, diameter, length, clearLength, options) {
+            var head = Parts.Hexagon(headDiameter, headLength);
+            var thread = Parts.Cylinder(diameter, length);
+
+            if (clearLength) {
+                var headClearSpace = Parts.Hexagon(headDiameter, clearLength);
+            }
+
+            return Parts.Hardware.Screw(head, thread, headClearSpace, options);
+        },
+
+        /**
          * Create a Flat Head Screw
          * @param {number} headDiameter head diameter
          * @param {number} headLength   head length
@@ -1338,6 +1468,24 @@ util = {
         var msg = method + ' is depreciated.' + ((' ' + message) || '');
         if (console && console.error) console[error ? 'error' : 'warn'](msg); // eslint-disable-line no-console
         if (error) throw new Error(msg);
+    },
+
+    /**
+     * Convert an imperial `inch` to metric `mm`.
+     * @param  {Number} x Value in inches
+     * @return {Number}   Result in mm
+     */
+    inch: function inch(x) {
+        return x * 25.4;
+    },
+
+    /**
+     * Convert metric `cm` to imperial `inch`.
+     * @param  {Number} x Value in cm
+     * @return {Number}   Result in inches
+     */
+    cm: function cm(x) {
+        return x / 25.4;
     },
 
     label: function label(text, x, y, width, height) {
@@ -1808,7 +1956,9 @@ util = {
             return w[side[0]][axis] - m[side[1]][axis];
         });
 
-        return delta ? util.array.add(t, delta) : t;
+        return delta ? this.axisApply(axes, function (i) {
+            return t[i] + delta;
+        }) : t;
     },
 
     snap: function snap(moveobj, withobj, axis, orientation, delta) {
@@ -1968,6 +2118,8 @@ util = {
          * @param {CSG} object Object to add the parts dictionary.
          * @param {string} name   Name of the part
          * @param {boolean} hidden If true, then the part not be added during a default `combine()`
+         * @param {string} subparts   Prefix for subparts if adding a group
+         * @param {string} parts   When adding a group, you can pick the parts you want to include as the named part.
          */
         self.add = function (object, name, hidden, subparts, parts) {
             if (object.parts) {
@@ -2040,8 +2192,8 @@ util = {
             var g = union(util.mapPick(this.parts, pieces, function (value, key, object) {
                 return map ? map(value, key, object) : util.identity(value);
             }));
-
-            return g.subtractIf(Array.isArray(self.holes) ? union(self.holes) : self.holes, self.holes && !options.noholes);
+            // console.log(self.holes)
+            return g.subtractIf(self.holes && Array.isArray(self.holes) ? union(self.holes) : self.holes, self.holes && !options.noholes);
 
         };
 
@@ -2604,13 +2756,14 @@ util = {
         };
 
         CSG.prototype.centerWith = function centerWith(axis, to) {
-            util.depreciated('centerWith', false, 'Use align instead.');
+            util.depreciated('centerWith', true, 'Use align instead.');
             return util.centerWith(this, axis, to);
         };
 
-        CSG.prototype.center = function centerWith(to, axis) {
-            util.depreciated('center', false, 'Use align instead.');
-            return util.centerWith(this, axis, to);
+        if (CSG.center) echo('CSG already has .center');
+        CSG.prototype.center = function center(axis) {
+            // console.log('center', axis, this.getBounds());
+            return util.centerWith(this, axis || 'xyz', util.unitCube(), 0);
         };
 
         CSG.prototype.calcCenter = function centerWith(axis) {
@@ -2646,6 +2799,10 @@ util = {
          */
         CSG.prototype.enlarge = function enlarge(x, y, z) {
             return util.enlarge(this, x, y, z);
+        };
+
+        CAG.prototype.enlarge = function cag_enlarge(x, y) {
+            return util.enlarge(this, x, y);
         };
 
         /**
@@ -2876,6 +3033,195 @@ util = {
         };
 
     }
+};
+
+// gears.jscad
+/* exported Gears */
+
+/**
+ * A gear moduel for openJSCAD.
+ * ![parts example](jsdoc2md/hexagon.png)
+ * @example
+ *include('jscad-utils-color.jscad');
+ *
+ *function mainx(params) {
+ *   util.init(CSG);
+ *
+ *   // draws a blue hexagon
+ *   return Parts.Hexagon(10, 5).color('blue');
+ *}
+ * @type {Object}
+ * @module jscad-gears
+ * @exports Gears
+ */
+var Gears = {
+
+    gearInfo: function (options) {
+        options = Object.assign({
+            circularPitch: 5,
+            // pressureAngle: 20,
+            clearance: 0,
+            twist: 0
+        }, options);
+
+        var addendum = options.circularPitch / Math.PI;
+        var dedendum = addendum + options.clearance;
+
+        // radiuses of the 4 circles:
+        var pitchRadius = options.outerRadius ? options.outerRadius - addendum : options.numTeeth * options.circularPitch / (2 * Math.PI);
+        var numTeeth = options.numTeeth || ((2 * Math.PI * pitchRadius / options.circularPitch) | 0);
+        var baseRadius = options.baseRadius || pitchRadius * Math.cos(Math.PI * options.pressureAngle / 180);
+        var pressureAngle = options.pressureAngle || Math.acos(baseRadius / pitchRadius) * (180 / Math.PI);
+        var outerRadius = options.outerRadius || pitchRadius + addendum;
+        var rootRadius = options.rootRadius || pitchRadius - dedendum;
+        // console.log(`pitch:${pitchRadius} base:${baseRadius} outer:${outerRadius} root:${rootRadius} teeth:${numTeeth} pressureAngle:${pressureAngle}`);
+
+        var maxtanlength = Math.sqrt(outerRadius * outerRadius - baseRadius * baseRadius);
+        var maxangle = maxtanlength / baseRadius;
+
+        var tl_at_pitchcircle = Math.sqrt(pitchRadius * pitchRadius - baseRadius * baseRadius);
+        var angle_at_pitchcircle = tl_at_pitchcircle / baseRadius;
+        var diffangle = angle_at_pitchcircle - Math.atan(angle_at_pitchcircle);
+        var angularToothWidthAtBase = Math.PI / numTeeth + 2 * diffangle;
+
+        var helix_angle = options.twist;
+        var ha = 90 - helix_angle;
+        var twst = 360 * (options.thickness / tan(ha)) / (2 * Math.PI * pitchRadius); // eslint-disable-line no-undef
+        // build a single 2d tooth in the 'points' array:
+        var resolution = CSG.defaultResolution2D;
+
+        return Object.assign({
+            addendum: addendum,
+            dedendum: dedendum,
+            numTeeth: numTeeth,
+
+            // radiuses of the 4 circles:
+            pitchRadius: pitchRadius,
+            baseRadius: baseRadius,
+            outerRadius: outerRadius,
+            rootRadius: rootRadius,
+
+            pressureAngle: pressureAngle,
+
+            maxtanlength: maxtanlength,
+            maxangle: maxangle,
+
+            tl_at_pitchcircle: tl_at_pitchcircle,
+            angle_at_pitchcircle: angle_at_pitchcircle,
+            diffangle: diffangle,
+            angularToothWidthAtBase: angularToothWidthAtBase,
+
+            helix_angle: helix_angle,
+            ha: ha,
+            twst: twst,
+
+            // build a single 2d tooth in the 'points' array:// build a single 2d tooth in the 'points' array
+            resolution: resolution,
+        }, options);
+    },
+
+    /*
+      For gear terminology see:
+        http://www.astronomiainumbria.org/advanced_internet_files/meccanica/easyweb.easynet.co.uk/_chrish/geardata.htm
+      Algorithm based on:
+        http://www.cartertools.com/involute.html
+
+      circularPitch: The distance between adjacent teeth measured at the pitch circle
+    */
+    createGear: function createGear(gear) {
+        // gear.angularToothWidthAtBase = gear.angularToothWidthAtBase;
+        var points = [new CSG.Vector2D(0, 0)];
+        for (var i = 0; i <= gear.resolution; i++) {
+            // first side of the tooth:
+            var angle = gear.maxangle * i / gear.resolution;
+            var tanlength = angle * gear.baseRadius;
+            var radvector = CSG.Vector2D.fromAngle(angle);
+            var tanvector = radvector.normal();
+            var p = radvector.times(gear.baseRadius).plus(tanvector.times(tanlength));
+            // echo('i:', i, 'p:', p, 'angle:', angle, 'tanlength:', tanlength, 'radvector:', radvector, 'tanvector:', tanvector, 'baseRadius:', gear.baseRadius);
+            points[i + 1] = p;
+
+            // opposite side of the tooth:
+            radvector = CSG.Vector2D.fromAngle(gear.angularToothWidthAtBase - angle);
+            tanvector = radvector.normal().negated();
+            p = radvector.times(gear.baseRadius).plus(tanvector.times(tanlength));
+            points[2 * gear.resolution + 2 - i] = p;
+            // echo('point2', i, p);
+        }
+
+        // create the polygon and extrude into 3D:
+        var tooth3d = new CSG.Polygon2D(points).extrude({
+            offset: [0, 0, gear.thickness],
+            twistangle: gear.twst,
+            twiststeps: gear.thickness * 2
+        });
+
+        // return tooth3d;
+        var allteeth = new CSG();
+        for (var j = 0; j < gear.numTeeth; j++) {
+            var ang = j * 360 / gear.numTeeth;
+            var rotatedtooth = tooth3d.rotateZ(ang);
+            allteeth = allteeth.unionForNonIntersecting(rotatedtooth);
+        }
+
+        // build the root circle:
+        points = [];
+        var toothAngle = 2 * Math.PI / gear.numTeeth;
+        var toothCenterAngle = 0.5 * gear.angularToothWidthAtBase;
+        for (var k = 0; k < gear.numTeeth; k++) {
+            var angl = toothCenterAngle + k * toothAngle;
+            var p1 = CSG.Vector2D.fromAngle(angl).times(gear.rootRadius);
+            points.push(p1);
+        }
+
+        // create the polygon and extrude into 3D:
+        var rootcircle = new CSG.Polygon2D(points).extrude({
+            offset: [0, 0, gear.thickness]
+        });
+
+        var result = rootcircle.union(allteeth);
+
+        // center at origin:
+        result = result.translate([0, 0, -gear.thickness / 2]);
+
+        return result;
+    },
+
+    involuteGear: function (options) {
+        var gearInfo = this.gearInfo(options);
+        var gear = this.createGear(gearInfo);
+        gear.properties.gearInfo = gearInfo;
+        return gear;
+    },
+
+    doubleHelical: function (options) {
+        options = Object.assign(options, {
+            thickness: options.thickness / 2
+        });
+
+        var gearInfo = this.gearInfo(options);
+        var half = this.createGear(gearInfo);
+
+        var gear = union([
+      half.translate([0, 0, options.thickness / 2]), half.mirroredZ().translate([0, 0, -options.thickness / 2])
+    ]);
+
+        return Object.assign(gear, {
+            properties: gearInfo
+        });
+    },
+
+    placeHolder: function (options) {
+        var gearInfo = this.gearInfo(options);
+
+        return CSG.cylinder({ // object-oriented
+            start: [0, 0, -(options.thickness / 2)],
+            end: [0, 0, options.thickness / 2],
+            radius: gearInfo.outerRadius, // true cylinder
+            properties: gearInfo
+        });
+    }
+
 };
 
 // endinject
