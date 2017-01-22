@@ -188,22 +188,14 @@ function main(params) {
         return b;
     }
 
-    // var b = bolt(10)
-    // return union([
-    //   Parts.Cube([20, 20, 10]).Center()
-    //   .subtract(b.combine('clearance')), //.bisect('x').parts.positive,
-    //   // b.combine(),
-    //   // b.combine('clearance').translate([0, inch(0.25), 0])
-    // ]);
-    // var boltM6 = Parts.Hardware.PanHeadScrew(8.5, 5, 5, 65);
-    var bolt14x1 = bolt(inch(1));
-
     var bolts = util.group();
 
     // add the bolts to another group for assembled view
     var vplate = VPlate(params.length).rotateY(180).Zero();
 
-    var clamp = Parts.BBox(vplate.enlarge(0, 20, 15)).Zero();
+    var clampwidth = 25; // clamp width (y axis)
+    var clampheight = 10; // clamp height over the vixen plate
+    var clamp = Parts.BBox(vplate.enlarge(0, clampwidth, clampheight)).Zero();
 
     var p1 = clamp.subtract(vplate).bisect('y', 20);
     // split the clamp
@@ -220,7 +212,7 @@ function main(params) {
         L3 C3 R3 ==     c1-
        */
     // center bolt
-    var clampbolt = bolt(inch(2.5))
+    var clampbolt = bolt(inch(3))
         .rotate(c2.parts.negative, 'x', 90)
         .align('head', c2.parts.negative, 'xz')
         .snap('head', clamp, 'y', 'inside+');
@@ -256,7 +248,7 @@ function main(params) {
         .bisect('y');
 
     // var cylbox = Parts.BBox(cyl);
-    var vertpivotbolt = bolt(inch(2.5))
+    var vertpivotbolt = bolt(inch(3))
         .rotate(cyl.parts.negative, 'x', 90)
         .align('head', cyl.parts.negative, 'xz')
         .snap('head', cyl.parts.negative, 'y', 'inside+');
@@ -340,6 +332,7 @@ function main(params) {
         'aztooth'
     );
 
+    var bolt14x1 = bolt(inch(1));
     var scopebolts = util.group();
     scopebolts.add(bolt14x1.clone(), 'bolt1', false, 'bolt1');
     scopebolts.add(bolt14x1.clone().translate([inch(0.975), 0, 0]), 'bolt2', false, 'bolt2');
@@ -448,7 +441,7 @@ function main(params) {
     bolts.add(bolts.parts.azbolt_r.mirroredY(), 'azbolt_l');
 
     bolts.add(
-        bolt(inch(2))
+        bolt(inch(2.5))
         .snap('head', vplate, 'z', 'outside-')
         .snap('head', mount.parts.verticalplate, 'x', 'inside+')
         .align('head', mount.parts.verticalplate, 'y')
