@@ -17,7 +17,8 @@ function getParameterDefinitions() {
         azmount: 'azmount',
         verthandletop: 'vert handle top',
         verthandlebot: 'vert handle bot',
-        altitudedial: 'altitude dial',
+        azhandle_r: 'azmuth dial',
+        vixen_dovetail: 'vixen dovetail',
         vixen110: 'ota',
         assembled: 'assembled'
     };
@@ -46,6 +47,12 @@ function getParameterDefinitions() {
             }),
             initial: 'assembled',
             caption: 'Part:'
+        },
+        {
+            name: 'placeholder',
+            type: 'checkbox',
+            caption: 'Gear Placeholder:',
+            checked: true
         },
         {
             name: 'printbom',
@@ -146,24 +153,42 @@ function main(params) {
      * F - Width Across Flats
      * G - Width Across Corners
      * H - Head Height
+     * D - Head Diameter
      * @type {Object}
      */
     var boltsizes = {
-        '1/4': {
+        '1/4 hex': {
             E: inch(0.25),
             tap: inch(0.2010),
             close: inch(0.2570),
             loose: inch(0.2660),
             H: inch(5 / 32),
             G: inch(0.505),
-            F: inch(7 / 16)
+            F: inch(7 / 16),
+            type: 'HexHeadScrew'
+        },
+        '1/4 socket': {
+            E: inch(0.25),
+            tap: inch(0.2010),
+            close: inch(0.2570),
+            loose: inch(0.2660),
+            H: inch(0.250),
+            D: inch(0.375),
+            type: 'PanHeadScrew'
         }
+    };
+
+    var Clearances = {
+        tap: inch(-0.049),
+        close: inch(0.007),
+        loose: inch(0.016)
     };
 
     var BOM = {};
 
-    function bolt(length, type) {
-        type = type || '1/4';
+    function bolt(length, type, fit) {
+        type = type || '1/4 hex';
+        fit = fit || 'loose';
         var s = boltsizes[type];
 
         // Keep track of bolts for bill-of-materials
@@ -171,21 +196,38 @@ function main(params) {
         if (!BOM[bomkey]) BOM[bomkey] = 0;
         BOM[bomkey]++;
 
-        var b = Parts.Hardware.HexHeadScrew(s.G, s.H, s.E, length);
+        var b = Parts.Hardware[s.type](s.G || s.D, s.H, s.E, length);
 
-        var clearance = s.loose - s.E;
+        var clearance = s[fit] - s.E;
 
         b.add(
-            Parts.Hardware
-            .HexHeadScrew(s.G + clearance, s.H + clearance, s.loose, length)
+            Parts.Hardware[s.type]((s.G || s.D) + clearance, s.H + clearance, s[fit], length, length)
             .map(part => part.color('red')),
             'clearance',
             false,
-            'clearance'
+            'clearance-'
         );
 
-        // washer
         return b;
+    }
+
+    function washer(type, clearance, fit) {
+        var types = {
+            vixen: {
+                od: inch(0.465),
+                id: inch(0.258),
+                thickness: inch(0.061)
+            }
+        };
+
+        var t = types[type];
+        if (!t) throw new Error(`washer: unknown type: '${type}'`);
+        var w = util.group();
+        w.add(Parts.Tube(t.od, t.id, t.thickness).color('gray'), 'washer');
+        if (clearance) {
+            w.add(Parts.Cylinder(t.od + Clearances[fit], clearance).snap(w.parts.washer, 'z', 'inside+').color('red'), 'clearance');
+        }
+        return w;
     }
 
     var bolts = util.group();
@@ -213,27 +255,32 @@ function main(params) {
        */
     // center bolt
     var clampbolt = bolt(inch(3))
-        .rotate(c2.parts.negative, 'x', 90)
-        .align('head', c2.parts.negative, 'xz')
-        .snap('head', clamp, 'y', 'inside+');
+        .rotate(c2.parts.negative, 'x', 270)
+        .align('head', c1.parts.negative, 'xz')
+        .snap('head', clamp, 'y', 'inside-');
+
+    bolts.add(clampbolt.combine('head,thread'), 'clampbolt');
+
+    var clampbolt2 = clampbolt.clone()
+        .align('head', c2.parts.positive, 'xz');
+    bolts.add(clampbolt2.combine('head,thread'), 'clampbolt2');
 
     var mount = util.group();
 
     mount.add(
         union([c1.parts.negative, c2.parts.positive, p1.parts.positive]).bisect('y', -8).parts.positive
         .color('orange')
-        .subtract(clampbolt.combine('clearance')),
+        .subtract([clampbolt.combine('clearance'), clampbolt2.combine('clearance')]),
         'left'
     );
 
-    bolts.add(clampbolt.combine('head,thread'), 'clampbolt');
 
     var center = c2.parts.negative.enlarge(-1, 0, 0);
 
     mount.add(
         union([center, p2.parts.negative]).bisect('y', 8).parts.negative
         .color('green')
-        .subtract(clampbolt.combine('clearance')),
+        .subtract([clampbolt.combine('clearance'), clampbolt2.combine('clearance')]),
         'right'
     );
 
@@ -264,7 +311,7 @@ function main(params) {
             // .snap(cyl.parts.positive, 'z', 'outside+')
             // .fillet(-1.99, 'z-')
             Parts.BBox(cyl.parts.positive).bisect('z').parts.negative
-        ).subtract(vertpivotbolt.combine('clearance')).subtract(cyl.parts.negative).color('lightblue'),
+        ).subtract(vertpivotbolt.combine('clearance')).subtract(cyl.parts.negative).color('orange'),
         'leftverticalpiviot'
     );
 
@@ -279,7 +326,11 @@ function main(params) {
             // .snap(cyl.parts.negative, 'z', 'outside-')
             // .fillet(-1.99, 'z+')
             Parts.BBox(cyl.parts.negative).bisect('z').parts.positive
-        ).subtract(vertpivotbolt.combine('clearance')).subtract(cyl.parts.positive).color('orange'),
+        )
+        .subtract([
+            vertpivotbolt.parts.clearance, cyl.parts.positive
+          ])
+        .color('blue'),
         'rightverticalpiviot'
     );
 
@@ -306,41 +357,59 @@ function main(params) {
         .snap(azmount, 'z', 'outside+')
         .align(azmount, 'xy');
 
-    var channel = ring.bisect('y', null, -15, 'z', null, {
+    var azposition = -1; // 1 = rear, -1 = front
+    var channel = ring.bisect('y', null, -15 * azposition, 'z', null, {
         cutDelta: [0, 0, 0],
         rotationCenter: ring.centroid()
-    }).parts.positive.bisect('y', null, 15, 'z', null, {
+    }).parts.positive.bisect('y', null, 15 * azposition, 'z', null, {
         cutDelta: [0, 0, 0],
         rotationCenter: ring.centroid()
     }).parts.negative;
 
     var toothgap = 2;
+
+    function tooth(azposition) {
+        return Parts
+            .Tube(azsize.x - (toothoffset + toothgap), azsize.y + toothgap - (toothoffset + 20), 20)
+            .snap(azmount, 'z', 'outside+')
+            .align(azmount, 'xy')
+            .bisect('y', null, -5 * azposition, 'z', null, {
+                cutDelta: [0, 0, 0],
+                rotationCenter: ring.centroid()
+            }).parts.positive.bisect('y', null, 5 * azposition, 'z', null, {
+                cutDelta: [0, 0, 0],
+                rotationCenter: ring.centroid()
+            }).parts.negative
+            .fillet(-4, 'z+');
+    }
+
+    var fronttooth = tooth(-1);
+    var reartooth = tooth(1);
     mount.add(
-        Parts
-        .Tube(azsize.x - (toothoffset + toothgap), azsize.y + toothgap - (toothoffset + 20), 20)
-        .snap(azmount, 'z', 'outside+')
-        .align(azmount, 'xy')
-        .bisect('y', null, -5, 'z', null, {
-            cutDelta: [0, 0, 0],
-            rotationCenter: ring.centroid()
-        }).parts.positive.bisect('y', null, 5, 'z', null, {
-            cutDelta: [0, 0, 0],
-            rotationCenter: ring.centroid()
-        }).parts.negative
-        .fillet(-2, 'z+')
-        .color('pink'),
+        azposition == -1 ? fronttooth : reartooth,
         'aztooth'
     );
 
-    var bolt14x1 = bolt(inch(1));
     var scopebolts = util.group();
-    scopebolts.add(bolt14x1.clone(), 'bolt1', false, 'bolt1');
-    scopebolts.add(bolt14x1.clone().translate([inch(0.975), 0, 0]), 'bolt2', false, 'bolt2');
+    scopebolts.add(bolt(inch(1), '1/4 socket'), 'bolt1', false, 'bolt1');
+    scopebolts.add(bolt(inch(1), '1/4 socket').translate([inch(0.975), 0, 0]), 'bolt2', false, 'bolt2');
+
+
+    scopebolts.add(washer('vixen', inch(1), 'loose')
+        .snap('washer', scopebolts.parts.bolt1head, 'z', 'outside-'), 'washer1', true, 'washer1-');
+    scopebolts.add(washer('vixen', inch(1), 'loose')
+        .snap('washer', scopebolts.parts.bolt2head, 'z', 'outside-')
+        .align('washer', scopebolts.parts.bolt2head, 'xy'), 'washer2', true, 'washer2-');
     scopebolts.snap('bolt1head', azmount, 'z', 'inside-');
-    scopebolts.align('bolt1head,bolt2head', mount.parts.aztooth, 'xy');
-    // console.log('bolt', scopebolts.parts);
+
+    // scopebolts.align('bolt1head,bolt2head', mount.parts.aztooth, 'xy');
+    scopebolts.align('bolt1head,bolt2head', reartooth, 'xy');
+
     mount.add(
-        bolt(inch(1)).rotate(azmount, 'x', 180).align('head', azmount, 'xy').snap('head', azmount, 'z', 'inside+'),
+        bolt(inch(1.5))
+        .rotate(azmount, 'x', 180)
+        .align('head', azmount, 'xy')
+        .snap('head', azmount, 'z', 'inside+'),
         'azbolt',
         true,
         'azbolt'
@@ -348,23 +417,33 @@ function main(params) {
 
     bolts.add(mount.combine('azbolthead,azboltthread'), 'azbolt');
 
-    mount.add(mount.parts.verticalplate.subtract(union(mount.parts.azboltclearance, channel)), 'azbase');
+    mount.add(mount.parts.verticalplate
+        .subtract(
+            union([
+              mount.parts.azboltclearance
+                .intersect(mount.parts.verticalplate)
+                .chamfer(-1, 'z+')
+                .chamfer(-1, 'z-'),
+              channel.fillet(-4, 'z+')
+            ])), 'azbase');
 
     var azmountholes = union(
         scopebolts.combine('bolt1clearance,bolt2clearance'),
-        scopebolts.combine('bolt1clearance,bolt2clearance').translate([0, 0, -5]),
+        scopebolts.combine('washer1-clearance,washer2-clearance'),
         mount.combine('azboltclearance')
     );
+
 
     bolts.add(scopebolts.combine('bolt1head,bolt1thread,bolt2head,bolt2thread'), 'scopebolts');
 
     var azclip = (azsize.y - size.y) / 2;
+    mount.add(azmount
+        .intersect(
+            azmount.bisect('y', azclip).parts.negative.bisect('y', -azclip).parts.positive.translate([-19, 0, 0])
+        ), 'azmount-base', true);
 
     mount.add(
-        azmount
-        .intersect(
-            azmount.bisect('y', azclip).parts.negative.bisect('y', -azclip).parts.positive.translate([-30, 0, 0])
-        )
+        mount.parts['azmount-base']
         .union(mount.parts.aztooth)
         .subtract(azmountholes)
         .color('yellow'),
@@ -373,75 +452,79 @@ function main(params) {
 
     var nut = Parts.Hexagon(12.5, 5.6).color('darkgray');
     var azadj = util.group();
-    azadj.add(
-        nut
-        .rotateX(90)
-        .enlarge([1, 1, 1])
-        .align(mount.parts.aztooth, 'x')
-        .snap(mount.parts.azbase, 'y', 'inside+')
-        .snap(mount.parts.azbase, 'z', 'outside+')
-        .translate([0, -9, 0])
-        .color('pink'),
-        'nut'
-    );
 
     azadj.add(
-        bolt(inch(1.5))
-        .rotate(azadj.parts.nut, 'x', 90)
-        .align('head', azadj.parts.nut, 'xz')
-        .snap('thread', mount.parts.aztooth, 'y', 'outside-'),
+        bolt(inch(2), '1/4 hex', 'close')
+        .rotate(mount.parts.aztooth, 'x', 90)
+        .align('head', mount.parts.aztooth, 'x')
+        // .align('head', azadj.parts.nut, 'xz')
+        .snap('clearance-thread', mount.parts.aztooth, 'y', 'outside-')
+        .snap('clearance-thread', mount.parts.verticalplate, 'z', 'outside+')
+        .translate([0, 0, 2.5]),
         'bolt',
         false,
         'bolt'
     );
 
     azadj.add(
+        nut
+        .rotateX(90)
+        .rotateY(30)
+        .enlarge([0.5, 0.5, 0.5])
+        .align(azadj.parts.bolt, 'xz')
+        .snap(mount.parts.azbase, 'y', 'inside+')
+        // .snap(mount.parts.azbase, 'z', 'outside+')
+        .translate([0, -7, 0])
+        .color('pink'),
+        'nut'
+    );
+
+
+    azadj.add(
         Parts
-        .Cube([30, 9, 15])
-        .align(azadj.parts.nut, 'x')
-        .snap(azadj.parts.nut, 'y', 'outside-')
+        .Cube([25, 20, 7.5])
+        .align(azadj.parts.nut, 'xy')
+        // .snap(azadj.parts.nut, 'y', 'outside-')
         .snap(mount.parts.azbase, 'z', 'outside+')
-        .bisect('x', -0, 30, 'y', -0).parts.negative,
+        .bisect('x', -0, 30, 'y', -0).parts.negative
+        .bisect('x', 0, -30, 'y', -0).parts.positive,
         'bracket1'
     );
-    //
-    // azadj.add(Parts.Cylinder(15, 6)
-    //     .rotateX(90)
-    //     .align(azadj.parts.nut, 'xz')
-    //     .snap(azadj.parts.nut, 'y', 'outside-'), 'bracket1');
-    //
-    azadj.add(azadj.parts.bracket1.snap(azadj.parts.nut, 'y', 'outside+'), 'bracket2');
-    //
-    // var azadjsize = azadj.combine('bracket1,bracket2').size();
-    //
-    // azadj.add(Parts.Cube([azadjsize.x, azadjsize.y,g (azadjsize.z / 2) - 1.5])
-    //     .snap(mount.parts.azbase, 'z', 'outside+')
-    //     .align(azadj.parts.nut, 'xy')
-    //     .fillet(-2, 'z+').color('green'),
-    //     'base');
+
     mount.add(
         azadj
-        .combine('bracket1,bracket2')
-        .subtract(union(azadj.parts.boltclearance.enlarge([1, 0, 1]), azadj.parts.nut, channel)),
+        .combine('bracket1')
+        .subtract([
+          // azadj.parts.boltclearance.enlarge([1, 0, 1]),
+          Boxes.BBox(azadj.parts.nut)
+            .stretch('z', 10)
+            .snap(azadj.parts.nut, 'z', 'inside+')
+            .translate([0, 0, -util.size(azadj.parts.nut).z / 2]),
+            channel
+          ]),
         'azadj_r'
     );
 
     mount.add(
-        mount.parts.azadj_r.mirroredY().bisect('x', 0, -30, 'y', -0).parts.positive
-        .subtract(
-            mount.parts.leftverticalpiviot
-            .enlarge([1, 1, 1])
-            .rotate(bolts.parts.vertpivotbolt.centroid(), util.rotationAxes.y, -15)
-        )
-        .color('purple'),
+        mount.parts.azadj_r
+        .mirroredY(),
+        // .bisect('x', 0, -30, 'y', -0).parts.positive
+        // .subtract(
+        //     mount.parts.leftverticalpiviot
+        //     .enlarge([1, 1, 1])
+        //     .rotate(bolts.parts.vertpivotbolt.centroid(), util.rotationAxes.y, -15)
+        // ),
         'azadj_l'
     );
+
+    // return [mount.parts.verticalplate, mount.parts.aztooth,
+    // mount.parts.azadj_r, mount.parts.azadj_l];
 
     bolts.add(azadj.combine('bolthead,boltthread,nut'), 'azbolt_r');
     bolts.add(bolts.parts.azbolt_r.mirroredY(), 'azbolt_l');
 
     bolts.add(
-        bolt(inch(2.5))
+        bolt(inch(2.0))
         .snap('head', vplate, 'z', 'outside-')
         .snap('head', mount.parts.verticalplate, 'x', 'inside+')
         .align('head', mount.parts.verticalplate, 'y')
@@ -510,9 +593,7 @@ function main(params) {
 
     var parts = {
         altitudedial: function () {
-            // return Gears.involuteGear({
-            return Gears
-                .placeHolder({
+            return Gears[params.placeholder ? 'placeHolder' : 'involuteGear']({
                     thickness: 6,
                     outerRadius: 35,
                     baseRadius: 34,
@@ -522,20 +603,74 @@ function main(params) {
                 .snap(mount.parts.verticalplate, 'z', 'outside-')
                 .color('lightgreen');
         },
+        azmuthdial: function () {
+            return Gears[params.placeholder ? 'placeHolder' : 'involuteGear']({
+                    thickness: inch(3 / 8),
+                    outerRadius: inch(3 / 4),
+                    baseRadius: inch(3 / 4) - 1,
+                    circularPitch: 1
+                })
+                .rotateX(90)
+                .align(bolts.parts.azbolt_r, 'xz')
+                .snap(azadj.parts.bolthead, 'y', 'inside+')
+                // .translate([0, -1, 0])
+                .color('lightgreen')
+                .subtract([
+                  azadj.parts.bolthead,
+                  azadj.parts['boltclearance-thread'].enlarge(0, 1, 0)]);
+        },
         left: function () {
-            return mount.combine('left,leftverticalpiviot').subtract(union(bolts.combine('vertboltclearance')));
+            var level = Parts.Cube([0.8, 5, 0.8])
+                .align(vertpivotbolt.parts.thread, 'z')
+                .snap(mount.parts.leftverticalpiviot, 'x', 'outside+')
+                .snap(mount.parts.leftverticalpiviot, 'y', 'inside+');
+
+            return mount.combine('left,leftverticalpiviot')
+                .subtract(bolts.combine('vertboltclearance'))
+                .union(level);
             // .union(bolts.combine('vertbolt'));
         },
         right: function () {
             return mount.combine('right');
         },
         azbase: function () {
-            return mount
-                .combine('rightverticalpiviot,azbase,azadj_l,azadj_r')
-                .subtract(union(bolts.combine('vertbolt').enlarge([10, 5, 0]), vertpivotbolt.combine('clearance')));
+            var a = mount
+                .combine('rightverticalpiviot,azbase,azadj_l,azadj_r');
+
+            var level = Parts.Cube([0.8, 5, 0.8])
+                .align(vertpivotbolt.parts.thread, 'z')
+                .snap(mount.parts.rightverticalpiviot, 'x', 'outside+')
+                .snap(mount.parts.rightverticalpiviot, 'y', 'inside-');
+            var vlevel = Parts.Cube([0.8, 0.8, 5])
+                .align(mount.parts.azbase, 'y')
+                .snap(mount.parts.azbase, 'x', 'outside+')
+                .snap(mount.parts.azbase, 'z', 'inside+');
+
+            return a
+                .subtract([
+                  bolts.parts.vertbolt
+                    .stretch('x', 5)
+                    .align(bolts.parts.vertbolt, 'xy')
+                    .intersect(a)
+                    .enlarge([1, 1, 0])
+                    .chamfer(-1, 'z+')
+                    .chamfer(-1, 'z-'),
+                  azadj.parts.nut,
+                  azadj.parts.nut.mirroredY(),
+                  azadj.parts.bolt,
+                  azadj.parts.bolt.mirroredY(),
+                  vertpivotbolt.parts.clearance
+                ]).union([level, vlevel]);
         },
         azmount: function () {
-            return mount.combine('azmount');
+            var a = mount.parts.azmount;
+            var base = mount.parts['azmount-base'];
+            var vlevel = Parts.Cube([0.8, 0.8, 5])
+                .align(base, 'y')
+                .snap(base, 'x', 'outside+')
+                .snap(base, 'z', 'inside-');
+
+            return [a, vlevel];
         },
         verthandletop: function (dial) {
             dial = dial || parts.altitudedial();
@@ -547,22 +682,59 @@ function main(params) {
                 .snap(mount.parts.verticalplate, 'z', 'outside+')
                 .subtract(union(bolts.combine('vertboltclearance'), bolts.parts.vertbolt_nut2));
         },
+        azhandle_r: function (dial) {
+            return dial || parts.azmuthdial();
+        },
         vixen110: function (part, bolts) {
             return scope(part || parts.azmount(), bolts || scopebolts.combine());
         },
+        vixen_dovetail: function () {
+            var v = VPlate(params.length);
+            var b = bolt(20, '1/4 hex')
+                .rotate(v, 'x', 180)
+                .align('thread', v, 'xy')
+                .snap('head', v, 'z', 'inside+');
+
+            // console.log(Object.keys(scopebolts.clone().parts))
+            var sbolts = scopebolts
+                .clone()
+                .snap('bolt1', v, 'z', 'inside-')
+                .align('bolt1,bolt2', v.bisect('x').parts.negative, 'x')
+                .combine('bolt1clearance-thread,bolt2clearance-thread,washer1-clearance,washer2-clearance', undefined, function (part, name) {
+                    return part
+                        .intersect(v)
+                        .chamfer(-1, 'z+')
+                        .chamfer(-1, 'z-');
+                });
+
+            // return sbolts;
+            return v.subtract([
+              nut
+              .enlarge(0, 0, 3)
+              .align(v, 'xy')
+              .snap(v, 'z', 'inside+'),
+              b.parts['clearance-thread'].intersect(v).chamfer(-1, 'z-'),
+              sbolts
+            ]);
+
+        },
         assembled: function () {
             var dial = parts.altitudedial();
+            var azdial = parts.azhandle_r();
             var azmount = parts.azmount();
             return union([
                 parts.left(),
-                parts.right(),
+                // parts.right(),
                 parts.azbase(),
                 azmount,
-                bolts.combine(),
-                parts.verthandletop(dial),
-                parts.verthandlebot(dial),
+                // bolts.combine(),
+                // parts.verthandletop(dial),
+                // parts.verthandlebot(dial),
+                // azdial,
+                // azdial.mirroredY(),
+                // azadj.combineAll(),
                 // scopebolts.combine(),
-                parts.vixen110(azmount, scopebolts.combine())
+                // parts.vixen110(azmount, scopebolts.combine())
             ]);
         }
     };
